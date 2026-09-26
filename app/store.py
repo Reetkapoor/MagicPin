@@ -79,5 +79,10 @@ class StateStore:
             self.suppressions.add(key)
             return True
 
+    def release_suppression(self, key: str) -> None:
+        if key:
+            with self._lock:
+                self.suppressions.discard(key)
+
 
 state = StateStore()
