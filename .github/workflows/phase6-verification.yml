@@ -1,0 +1,27 @@
+name: Phase 6 Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify-deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pytest -q
+      - run: python scripts/phase5_scorecard.py
+      - run: docker build -t vera-merchant-ai:phase6 .
+      - name: Run container
+        run: |
+          docker run -d --name vera-merchant-ai -p 8000:8000 vera-merchant-ai:phase6
+          for i in $(seq 1 15); do curl -fsS http://127.0.0.1:8000/v1/healthz && exit 0; sleep 1; done
+          docker logs vera-merchant-ai
+          exit 1
+      - run: docker rm -f vera-merchant-ai
