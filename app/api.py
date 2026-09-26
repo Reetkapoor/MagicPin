@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -18,8 +20,16 @@ from .signals import select_triggers
 from .suppression import suppression_key
 from .validator import validate_composed
 
-app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0")
 START_TIME = time.time()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    state.reset()
+    yield
+
+
+app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0", lifespan=lifespan)
 
 
 @app.get("/healthz", response_model=HealthResponse)
@@ -65,36 +75,25 @@ async def push_context(body: ContextRequest):
     }
 
 
-@app.post("/tick", response_model=TickResponse)
-@app.post("/v1/tick", response_model=TickResponse)
-async def tick(body: TickRequest):
-    candidates = []
-    for trg_id in body.available_triggers:
-        trg = state.get_context("trigger", trg_id)
-        if not trg:
-            continue
-        item = dict(trg)
-        item["_trigger_id"] = trg_id
-        candidates.append(item)
+async def _process_trigger(trg, now: str, deadline: float):
+    if time.monotonic() >= deadline:
+        return None
 
-    actions = []
-    merchants_messaged_this_tick = set()
-    for trg in select_triggers(candidates, max_actions=MAX_TICK_ACTIONS):
-        trg_id = trg.get("_trigger_id") or trg.get("trigger_id") or trg.get("id")
-        m_id = trg.get("merchant_id")
-        if not m_id or m_id in merchants_messaged_this_tick or m_id in state.opted_out_merchants:
-            continue
+    trg_id = trg.get("_trigger_id") or trg.get("trigger_id") or trg.get("id")
+    m_id = trg.get("merchant_id")
+    if not m_id or m_id in state.opted_out_merchants:
+        return None
 
-        merchant = state.get_context("merchant", m_id)
-        if not merchant:
-            continue
-        category = get_category_for_merchant(merchant)
-        customer = state.get_context("customer", trg.get("customer_id")) if trg.get("customer_id") else None
+    merchant = state.get_context("merchant", m_id)
+    if not merchant:
+        return None
+    category = get_category_for_merchant(merchant)
+    customer = state.get_context("customer", trg.get("customer_id")) if trg.get("customer_id") else None
+    key = suppression_key(trg, now) if now else trg.get("suppression_key", "")
+    if key and not state.reserve_suppression(key):
+        return None
 
-        key = suppression_key(trg, body.now) if body.now else trg.get("suppression_key", "")
-        if key and key in state.suppressions:
-            continue
-
+    try:
         trigger_for_compose = dict(trg)
         if key:
             trigger_for_compose["suppression_key"] = key
@@ -105,7 +104,6 @@ async def tick(body: TickRequest):
             composed, merchant, category, trigger_for_compose, allowed_numbers
         )
 
-        # One deterministic fallback attempt after validation failure.
         if not valid:
             merchant_name = merchant.get("identity", {}).get("name", "your business")
             locality = merchant.get("identity", {}).get("locality") or merchant.get("identity", {}).get("city") or ""
@@ -127,7 +125,11 @@ async def tick(body: TickRequest):
             }
 
         conv_id = f"conv_{m_id}_{trg_id}"
-        actions.append({
+        state.merchant_active_conv[m_id] = conv_id
+        state.conversations.setdefault(conv_id, []).append({
+            "from": "vera", "body": composed["body"], "ts": now
+        })
+        return {
             "conversation_id": conv_id,
             "merchant_id": m_id,
             "customer_id": trg.get("customer_id"),
@@ -139,17 +141,44 @@ async def tick(body: TickRequest):
             "cta": composed["cta"],
             "suppression_key": key or composed["suppression_key"],
             "rationale": composed["rationale"],
-        })
-        merchants_messaged_this_tick.add(m_id)
+        }
+    except Exception:
+        # Fail-safe: never let one malformed trigger make /tick return 500.
         if key:
-            state.suppressions.add(key)
-        state.merchant_active_conv[m_id] = conv_id
-        state.conversations.setdefault(conv_id, []).append({
-            "from": "vera",
-            "body": composed["body"],
-            "ts": body.now or "1970-01-01T00:00:00+00:00",
-        })
+            state.suppressions.discard(key)
+        return None
 
+
+@app.post("/tick", response_model=TickResponse)
+@app.post("/v1/tick", response_model=TickResponse)
+async def tick(body: TickRequest):
+    candidates = []
+    for trg_id in body.available_triggers:
+        trg = state.get_context("trigger", trg_id)
+        if not trg:
+            continue
+        item = dict(trg)
+        item["_trigger_id"] = trg_id
+        candidates.append(item)
+
+    selected = select_triggers(candidates, max_actions=MAX_TICK_ACTIONS)
+    deadline = time.monotonic() + 14.0
+    sem = asyncio.Semaphore(8)
+
+    async def bounded(trg):
+        async with sem:
+            return await _process_trigger(trg, body.now or "1970-01-01T00:00:00+00:00", deadline)
+
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*(bounded(trg) for trg in selected), return_exceptions=True),
+            timeout=14.5,
+        )
+    except asyncio.TimeoutError:
+        results = []
+
+    actions = [r for r in results if isinstance(r, dict)]
+    actions.sort(key=lambda a: a["trigger_id"])
     return {"actions": actions}
 
 
