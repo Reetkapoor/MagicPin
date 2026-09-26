@@ -9,6 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY static ./static
 COPY dataset ./dataset
 COPY expanded ./expanded
 COPY challenge-brief.md challenge-testing-brief.md engagement-design.md engagement-research.md ./
