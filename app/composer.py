@@ -196,8 +196,8 @@ def compose(category: Dict[str, Any], merchant: Dict[str, Any], trigger: Dict[st
             offer_text = active_offer or "your active thali offer"
             body = (
                 f"{salutation}, here's a starter direction for {m_name}'s corporate thali package in {locality}. "
-                f"Build the package around {offer_text}, then adapt quantity and delivery terms for office orders. "
-                f"I can turn this into a short WhatsApp draft for nearby office facilities managers now."
+                f"Build it around {offer_text}, then adapt quantity and delivery terms for office orders. "
+                f"I can turn this into a short WhatsApp draft now."
             )
             cta = "binary_yes_no"
             template_name = "vera_planning_proposal_v1"
@@ -239,10 +239,10 @@ def compose(category: Dict[str, Any], merchant: Dict[str, Any], trigger: Dict[st
             cover_shift = payload.get("covers_delta_pct", -0.12)
             cover_shift_str = f"{int(cover_shift * 100)}%"
             body = (
-                f"Quick heads-up {salutation} — {match} at {venue} tonight. "
+                f"Quick heads-up {salutation} — {match} tonight. "
                 f"Saturday IPL matches shift restaurant covers by {cover_shift_str}. "
-                f"Skip a match-night dine-in promo; push your {active_offer_title} as a delivery-only Saturday special instead. "
-                f"I can draft the delivery banner and Insta story now."
+                f"Skip a dine-in promo; push your {active_offer_title} as a delivery-only special instead. "
+                f"I can draft the delivery banner now."
             )
             cta = "binary_yes_no"
             template_name = "vera_ipl_intel_v1"
