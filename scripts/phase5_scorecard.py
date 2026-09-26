@@ -32,6 +32,10 @@ def load_dataset():
 
 
 def load_baseline():
+    subprocess.run(
+        ["git", "fetch", "--depth=1", "origin", BASELINE_COMMIT],
+        cwd=ROOT, check=True, stdout=subprocess.DEVNULL,
+    )
     source = subprocess.check_output(
         ["git", "show", f"{BASELINE_COMMIT}:bot.py"], cwd=ROOT, text=True
     )
