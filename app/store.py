@@ -18,6 +18,7 @@ class StateStore:
         self.merchant_active_conv: Dict[str, str] = {}
         self.opted_out_merchants: Set[str] = set()
         self._scope_index: Dict[str, Set[str]] = {s: set() for s in self.SCOPES}
+        self._counts: Dict[str, int] = {s: 0 for s in self.SCOPES}
 
     def reset(self) -> None:
         with self._lock:
@@ -27,6 +28,7 @@ class StateStore:
             self.merchant_active_conv.clear()
             self.opted_out_merchants.clear()
             self._scope_index = {s: set() for s in self.SCOPES}
+            self._counts = {s: 0 for s in self.SCOPES}
 
     def get_context(self, scope: str, context_id: str) -> Optional[Dict[str, Any]]:
         entry = self.contexts.get((scope, context_id))
@@ -48,7 +50,10 @@ class StateStore:
             if cur and cur["version"] >= version:
                 return False
             self.contexts[(scope, context_id)] = {"version": version, "payload": deepcopy(payload)}
-            self._scope_index.setdefault(scope, set()).add(context_id)
+            ids = self._scope_index.setdefault(scope, set())
+            if context_id not in ids:
+                ids.add(context_id)
+                self._counts[scope] = self._counts.get(scope, 0) + 1
             return True
 
     def snapshot(self) -> Mapping[Tuple[str, str], Mapping[str, Any]]:
@@ -63,7 +68,16 @@ class StateStore:
         return tuple(sorted(self._scope_index.get(scope, set())))
 
     def get_counts(self) -> Dict[str, int]:
-        return {scope: len(ids) for scope, ids in self._scope_index.items()}
+        return dict(self._counts)
+
+    def reserve_suppression(self, key: str) -> bool:
+        if not key:
+            return True
+        with self._lock:
+            if key in self.suppressions:
+                return False
+            self.suppressions.add(key)
+            return True
 
 
 state = StateStore()
