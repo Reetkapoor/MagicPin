@@ -24,6 +24,11 @@ def _collect(value: Any, allowed: Set[str]) -> None:
             _collect(v, allowed)
     elif isinstance(value, (int, float)) and not isinstance(value, bool):
         allowed.add(str(value))
+        # Dataset percentages may be injected as fractions (e.g. -0.12) while
+        # the outbound message renders them as -12%.
+        if isinstance(value, float) and abs(value) <= 1:
+            pct = value * 100
+            allowed.add(f"{pct:g}%")
     elif isinstance(value, str):
         for match in NUMBER_RE.findall(value):
             allowed.add(match)
