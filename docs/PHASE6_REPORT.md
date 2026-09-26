@@ -30,5 +30,16 @@ Added `.github/workflows/phase6-verification.yml` to verify:
 3. Docker image construction;
 4. container startup and `/v1/healthz` availability.
 
-## Gate
-Phase 5 had already passed before legacy cleanup. Phase 6 requires the new deployment verification workflow to pass before the migration is considered fully closed.
+## Gate verification
+GitHub Actions Phase 6 run `36256900988` completed successfully.
+
+- pytest: **passed**
+- baseline-vs-migrated scorecard: **passed**
+- Docker build: **passed**
+- container startup: **passed**
+- `/v1/healthz` container health check: **passed**
+
+## Checkpoint 6
+**PHASE 6 VERIFIED SUCCESSFULLY.**
+
+The migration is complete: the runtime uses `app.main:app`, deployment packaging is present, the verified baseline is archived, and the legacy compatibility surface has been removed.
