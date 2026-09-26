@@ -25,6 +25,18 @@ The application is split into focused modules:
 
 No runtime LLM or external API is required.
 
+## Local demo UI
+
+The repository includes a lightweight browser UI served directly by FastAPI. It exercises the real `/v1/context`, `/v1/tick`, `/v1/reply`, and `/v1/teardown` endpoints.
+
+After starting the server, open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+The UI includes editable merchant/category/trigger JSON, one-click demo data, trigger execution, generated messages, CTA and decision details, merchant reply simulation, and state reset. Swagger remains available at `/docs`.
+
 ## API
 
 The challenge endpoints are available under `/v1`:
