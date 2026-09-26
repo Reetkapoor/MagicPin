@@ -3,6 +3,19 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List
 
 
+KIND_TO_SIGNAL = {
+    "regulation_change": "compliance",
+    "perf_dip": "performance_dip",
+    "seasonal_perf_dip": "seasonal_event",
+    "festival_upcoming": "seasonal_event",
+    "competitor_opened": "peer_gap",
+    "customer_lapsed_hard": "customer_lapse",
+    "customer_lapsed_soft": "customer_lapse",
+    "winback_eligible": "customer_lapse",
+    "perf_spike": "performance_spike",
+    "research_digest": "research_digest",
+}
+
 SIGNAL_WEIGHTS = {
     "compliance": 1.10,
     "performance_dip": 1.00,
@@ -15,7 +28,7 @@ SIGNAL_WEIGHTS = {
 
 
 def score_trigger(trigger: Dict[str, Any]) -> float:
-    kind = str(trigger.get("kind", ""))
+    kind = KIND_TO_SIGNAL.get(str(trigger.get("kind", "")), str(trigger.get("kind", "")))
     base = SIGNAL_WEIGHTS.get(kind, 0.50)
     urgency = float(trigger.get("urgency", 1) or 1)
     novelty = float(trigger.get("novelty", 1) or 1)
