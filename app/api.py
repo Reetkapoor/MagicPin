@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import json
 import time
-from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -12,6 +12,7 @@ from .schemas import (
     ReplyRequest, ReplyResponse, TickAction, TickResponse, HealthResponse,
 )
 from .store import state
+from .config import MAX_CONTEXT_BYTES
 
 app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0")
 START_TIME = time.time()
@@ -45,6 +46,9 @@ async def push_context(body: ContextRequest):
             "accepted": False, "reason": "invalid_scope",
             "details": f"Unknown scope: {body.scope}",
         })
+    payload_bytes = len(json.dumps(body.payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if payload_bytes > MAX_CONTEXT_BYTES:
+        return JSONResponse(status_code=400, content={"accepted": False, "reason": "payload_too_large"})
     if not state.put_context(body.scope, body.context_id, body.version, body.payload):
         return JSONResponse(status_code=409, content={
             "accepted": False, "reason": "stale_version",
@@ -53,7 +57,7 @@ async def push_context(body: ContextRequest):
     return {
         "accepted": True,
         "ack_id": f"ack_{body.context_id}_v{body.version}",
-        "stored_at": body.delivered_at or datetime.now(timezone.utc).isoformat(),
+        "stored_at": body.delivered_at or "1970-01-01T00:00:00+00:00",
     }
 
 
@@ -103,7 +107,7 @@ async def tick(body: TickRequest):
         state.merchant_active_conv[m_id] = conv_id
         state.conversations.setdefault(conv_id, []).append({
             "from": "vera", "body": composed["body"],
-            "ts": body.now or datetime.now(timezone.utc).isoformat(),
+            "ts": body.now or "1970-01-01T00:00:00+00:00",
         })
         if len(actions) >= 20:
             break
@@ -114,7 +118,7 @@ async def tick(body: TickRequest):
 @app.post("/v1/reply", response_model=ReplyResponse)
 async def reply(body: ReplyRequest):
     conv_history = state.conversations.setdefault(body.conversation_id, [])
-    event_ts = body.received_at or datetime.now(timezone.utc).isoformat()
+    event_ts = body.received_at or "1970-01-01T00:00:00+00:00"
     conv_history.append({
         "from": body.from_role, "msg": body.message,
         "ts": event_ts, "turn": body.turn_number,
