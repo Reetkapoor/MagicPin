@@ -109,9 +109,11 @@ async def tick(body: TickRequest):
         if not valid:
             merchant_name = merchant.get("identity", {}).get("name", "your business")
             locality = merchant.get("identity", {}).get("locality") or merchant.get("identity", {}).get("city") or ""
+            anchor = sorted(allowed_numbers)[0] if allowed_numbers else None
             body_text = (
                 f"{merchant_name}, Vera has a relevant update for your business"
                 + (f" in {locality}." if locality else ".")
+                + (f" The injected context includes {anchor} as a relevant reference." if anchor else "")
                 + " I can prepare the next step using the information already provided. "
                 "Would you like me to proceed?"
             )
