@@ -11,6 +11,8 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 BASELINE_COMMIT = "ec9c2d114991d3862120a739e28af0bffd98d153"
 
 
@@ -43,7 +45,7 @@ def load_baseline():
     return module
 
 
-def seed_client(client, categories, merchants, triggers):
+def seed_client(client, categories, merchants, customers, triggers):
     for cid, category in categories.items():
         client.post("/v1/context", json={
             "scope": "category", "context_id": cid, "version": 1, "payload": category,
@@ -52,6 +54,11 @@ def seed_client(client, categories, merchants, triggers):
     for mid, merchant in merchants.items():
         client.post("/v1/context", json={
             "scope": "merchant", "context_id": mid, "version": 1, "payload": merchant,
+            "delivered_at": "2026-09-26T12:00:00Z",
+        })
+    for cid, customer in customers.items():
+        client.post("/v1/context", json={
+            "scope": "customer", "context_id": cid, "version": 1, "payload": customer,
             "delivered_at": "2026-09-26T12:00:00Z",
         })
     for tid, trigger in triggers.items():
@@ -94,7 +101,7 @@ def main():
     from app.api import app as new_app
 
     with TestClient(new_app) as new_client:
-        seed_client(new_client, categories, merchants, triggers)
+        seed_client(new_client, categories, merchants, customers, triggers)
         new_actions, new_error = collect_actions(new_client, trigger_ids)
 
     # Baseline implementation at the original one-commit state.
@@ -104,6 +111,8 @@ def main():
             old_client.post("/v1/context", json={"scope": "category", "context_id": cid, "version": 1, "payload": category})
         for mid, merchant in merchants.items():
             old_client.post("/v1/context", json={"scope": "merchant", "context_id": mid, "version": 1, "payload": merchant})
+        for cid, customer in customers.items():
+            old_client.post("/v1/context", json={"scope": "customer", "context_id": cid, "version": 1, "payload": customer})
         for tid, trigger in triggers.items():
             old_client.post("/v1/context", json={"scope": "trigger", "context_id": tid, "version": 1, "payload": trigger})
         old_actions, old_error = collect_actions(old_client, trigger_ids)
