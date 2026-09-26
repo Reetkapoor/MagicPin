@@ -37,8 +37,11 @@ def validate_composed(
         return False, "body_length"
     if any(p in body.lower() for p in BANNED_PHRASES):
         return False, "banned_phrase"
-    if not grounded_numeric_tokens(body, allowed_numbers):
+    allowed = set(allowed_numbers)
+    if not grounded_numeric_tokens(body, allowed):
         return False, "ungrounded_numeric"
+    if allowed and not numeric_tokens(body):
+        return False, "anchor_number_missing"
     if merchant_name and merchant_name.lower() not in body.lower():
         return False, "merchant_name_missing"
 
