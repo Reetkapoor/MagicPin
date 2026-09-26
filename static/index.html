@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vera — Merchant AI Assistant</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#17202a;background:#f5f7fb}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:1180px;margin:0 auto;padding:28px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.brand{display:flex;gap:12px;align-items:center}.logo{width:42px;height:42px;border-radius:12px;background:#111827;color:white;display:grid;place-items:center;font-weight:800}
+h1{font-size:22px;margin:0} .sub{color:#667085;font-size:13px;margin-top:3px}
+.badge{padding:7px 11px;border-radius:999px;background:#e9f8ef;color:#18794e;font-size:12px;font-weight:700}
+.grid{display:grid;grid-template-columns:430px 1fr;gap:18px}.card{background:white;border:1px solid #e4e7ec;border-radius:16px;padding:18px;box-shadow:0 2px 8px #1018280a}
+h2{font-size:15px;margin:0 0 14px}label{font-size:12px;color:#475467;font-weight:650;display:block;margin:12px 0 6px}
+textarea,input{width:100%;border:1px solid #d0d5dd;border-radius:9px;padding:10px;font:13px ui-monospace,SFMono-Regular,Consolas,monospace;background:#fff}
+textarea{min-height:150px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}
+button{border:0;border-radius:9px;padding:10px 13px;font-weight:700;cursor:pointer;background:#111827;color:white}
+button.secondary{background:#eef2f6;color:#344054}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.status{font-size:12px;margin-top:10px;min-height:18px;color:#667085}.status.ok{color:#18794e}.status.err{color:#b42318}
+.output{min-height:530px}.empty{height:100%;display:grid;place-items:center;color:#98a2b3;text-align:center}
+.message{border:1px solid #e4e7ec;border-radius:13px;padding:14px;margin:10px 0;background:#fafbfc}.message.vera{background:#f7f7ff}
+.message .meta{font-size:11px;color:#667085;margin-bottom:7px;font-weight:700}.message p{margin:0;white-space:pre-wrap;line-height:1.5;font-size:14px}
+pre{white-space:pre-wrap;word-break:break-word;font-size:11px;color:#475467;margin:8px 0 0}
+details{margin-top:10px}summary{cursor:pointer;color:#667085;font-size:12px;font-weight:650}
+.reply{margin-top:16px;border-top:1px solid #eaecf0;padding-top:15px}
+@media(max-width:850px){.grid{grid-template-columns:1fr}.output{min-height:400px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="brand"><div class="logo">V</div><div><h1>Vera Merchant AI Assistant</h1><div class="sub">Local demo console · deterministic FastAPI engine</div></div></div><div id="health" class="badge">Checking API…</div></header>
+<div class="grid">
+<section class="card">
+<h2>1. Context</h2>
+<div class="row"><div><label>Merchant ID</label><input id="merchantId" value="merchant_demo_01"></div><div><label>Category ID</label><input id="categoryId" value="dentists"></div></div>
+<label>Merchant JSON</label>
+<textarea id="merchantJson"></textarea>
+<label>Category JSON</label>
+<textarea id="categoryJson"></textarea>
+<label>Trigger ID</label><input id="triggerId" value="trigger_demo_01">
+<label>Trigger JSON</label>
+<textarea id="triggerJson"></textarea>
+<div class="actions"><button onclick="seed()">Load demo</button><button class="secondary" onclick="pushContext()">Load context</button></div>
+<div id="status" class="status"></div>
+<hr style="border:0;border-top:1px solid #eaecf0;margin:18px 0">
+<h2>2. Run</h2>
+<label>Available triggers</label><input id="triggers" value="trigger_demo_01">
+<div class="actions"><button onclick="tick()">Generate Vera message</button><button class="secondary" onclick="resetAll()">Reset state</button></div>
+<div class="reply">
+<h2>3. Merchant reply</h2>
+<div class="row"><input id="conversationId" placeholder="Conversation ID"><input id="turn" type="number" value="2" min="1"></div>
+<label>Reply</label><input id="replyText" placeholder="e.g. Yes, proceed">
+<div class="actions"><button onclick="reply()">Send reply</button></div>
+</div>
+</section>
+<section class="card output" id="output"><div class="empty">Load the demo context, then generate a message.<br><br>The panel will show the outbound message, CTA, trigger, suppression key and rationale.</div></section>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(s,ok=false){$('status').textContent=s;$('status').className='status '+(ok?'ok':'err')}
+function seed(){
+$('merchantJson').value=JSON.stringify({merchant_id:"merchant_demo_01",category_slug:"dentists",identity:{name:"SmileCare Dental",owner_first_name:"Reet",locality:"Noida",city:"Noida",verified:false},performance:{calls:4,views:1200},customer_aggregate:{high_risk_adult_count:124},subscription:{plan:"Pro",days_remaining:12},offers:[{title:"₹299 Cleaning",status:"active"}]},null,2);
+$('categoryJson').value=JSON.stringify({slug:"dentists",display_name:"dental",voice:{vocab_taboo:[]}},null,2);
+$('triggerJson').value=JSON.stringify({kind:"perf_dip",merchant_id:"merchant_demo_01",payload:{metric:"calls",delta_pct:-0.5,vs_baseline:12}},null,2);
+setStatus("Demo data loaded. Click Load context.",true)
+}
+async function post(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(JSON.stringify(j));return j}
+async function pushContext(){
+try{
+await post("/v1/context",{scope:"merchant",context_id:$('merchantId').value,version:1,payload:JSON.parse($('merchantJson').value)});
+await post("/v1/context",{scope:"category",context_id:$('categoryId').value,version:1,payload:JSON.parse($('categoryJson').value)});
+const t=JSON.parse($('triggerJson').value); t.merchant_id=$('merchantId').value;
+await post("/v1/context",{scope:"trigger",context_id:$('triggerId').value,version:1,payload:t});
+setStatus("Context loaded successfully.",true)
+}catch(e){setStatus(e.message)}
+}
+async function tick(){
+try{
+await pushContext();
+const j=await post("/v1/tick",{now:new Date().toISOString(),available_triggers:$('triggers').value.split(",").map(x=>x.trim()).filter(Boolean)});
+renderActions(j.actions||[]);
+}catch(e){setStatus(e.message)}
+}
+function renderActions(a){
+if(!a.length){$('output').innerHTML='<div class="empty">No action was produced.<br><br>The trigger may have been suppressed, invalid, missing context, or opted out.</div>';return}
+const x=a[0];$('conversationId').value=x.conversation_id;
+$('output').innerHTML='<h2>Vera outbound</h2><div class="message vera"><div class="meta">'+esc(x.send_as)+' · '+esc(x.trigger_id)+'</div><p>'+esc(x.body)+'</p><details><summary>Decision details</summary><pre>'+esc(JSON.stringify({cta:x.cta,template_name:x.template_name,template_params:x.template_params,suppression_key:x.suppression_key,rationale:x.rationale},null,2))+'</pre></details></div>'
+}
+async function reply(){
+try{
+const j=await post("/v1/reply",{conversation_id:$('conversationId').value,merchant_id:$('merchantId').value,from_role:"merchant",message:$('replyText').value,turn_number:Number($('turn').value),received_at:new Date().toISOString()});
+const box=document.createElement("div");box.className="message";box.innerHTML='<div class="meta">VERA · '+esc(j.action)+'</div><p>'+esc(j.body||("Waiting "+(j.wait_seconds||0)+" seconds."))+'</p><details><summary>Rationale</summary><pre>'+esc(j.rationale||"")+'</pre></details>';$('output').appendChild(box);$('turn').value=Number($('turn').value)+1;$('replyText').value="";
+}catch(e){setStatus(e.message)}
+}
+async function resetAll(){try{await post("/v1/teardown",{});$('output').innerHTML='<div class="empty">State reset. Load context to start a new demo.</div>';setStatus("State wiped cleanly.",true)}catch(e){setStatus(e.message)}}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+async function health(){try{const j=await fetch("/v1/healthz").then(r=>r.json());$('health').textContent="API healthy · "+j.uptime_seconds+"s"}catch(e){$('health').textContent="API offline";$('health').style.background="#fdecec";$('health').style.color="#b42318"}}
+seed();health();
+</script>
+</body>
+</html>
