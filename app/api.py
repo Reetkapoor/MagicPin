@@ -20,7 +20,7 @@ from .signals import select_triggers
 from .suppression import suppression_key
 from .validator import validate_composed
 
-START_TIME = time.time()
+START_TIME = time.monotonic()
 
 
 @asynccontextmanager
@@ -35,7 +35,7 @@ app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0", lifespan=life
 @app.get("/healthz", response_model=HealthResponse)
 @app.get("/v1/healthz", response_model=HealthResponse)
 async def healthz():
-    return {"status": "ok", "uptime_seconds": int(time.time() - START_TIME), "contexts_loaded": state.get_counts()}
+    return {"status": "ok", "uptime_seconds": int(time.monotonic() - START_TIME), "contexts_loaded": state.get_counts()}
 
 
 @app.get("/metadata", response_model=MetadataResponse)
@@ -145,7 +145,7 @@ async def _process_trigger(trg, now: str, deadline: float):
     except Exception:
         # Fail-safe: never let one malformed trigger make /tick return 500.
         if key:
-            state.suppressions.discard(key)
+            state.release_suppression(key)
         return None
 
 
@@ -185,17 +185,20 @@ async def tick(body: TickRequest):
 @app.post("/reply", response_model=ReplyResponse)
 @app.post("/v1/reply", response_model=ReplyResponse)
 async def reply(body: ReplyRequest):
-    conv_history = state.conversations.setdefault(body.conversation_id, [])
-    event_ts = body.received_at or "1970-01-01T00:00:00+00:00"
-    conv_history.append({
-        "from": body.from_role, "msg": body.message,
-        "ts": event_ts, "turn": body.turn_number,
-    })
-    merchant = state.get_context("merchant", body.merchant_id) if body.merchant_id else None
-    result = handle_reply(body.conversation_id, body.message, body.turn_number, merchant)
-    if result.get("action") == "send":
-        conv_history.append({"from": "vera", "body": result.get("body", ""), "ts": event_ts})
-    return result
+    try:
+        conv_history = state.conversations.setdefault(body.conversation_id, [])
+        event_ts = body.received_at or "1970-01-01T00:00:00+00:00"
+        conv_history.append({
+            "from": body.from_role, "msg": body.message,
+            "ts": event_ts, "turn": body.turn_number,
+        })
+        merchant = state.get_context("merchant", body.merchant_id) if body.merchant_id else None
+        result = handle_reply(body.conversation_id, body.message, body.turn_number, merchant)
+        if result.get("action") == "send":
+            conv_history.append({"from": "vera", "body": result.get("body", ""), "ts": event_ts})
+        return result
+    except Exception:
+        return {"action": "wait", "wait_seconds": 30, "rationale": "Temporary processing failure; no outbound message sent."}
 
 
 @app.post("/teardown")
