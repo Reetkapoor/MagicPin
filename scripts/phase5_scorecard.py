@@ -145,10 +145,10 @@ def main():
     }
 
     with TestClient(new_app) as client:
-        seed_client(client, categories, merchants, triggers)
+        seed_client(client, categories, merchants, customers, triggers)
         a1, _ = collect_actions(client, trigger_ids)
     with TestClient(new_app) as client:
-        seed_client(client, categories, merchants, triggers)
+        seed_client(client, categories, merchants, customers, triggers)
         a2, _ = collect_actions(client, trigger_ids)
     result["determinism"] = a1 == a2
 
