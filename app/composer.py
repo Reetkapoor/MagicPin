@@ -239,7 +239,7 @@ def compose(category: Dict[str, Any], merchant: Dict[str, Any], trigger: Dict[st
             cover_shift = payload.get("covers_delta_pct", -0.12)
             cover_shift_str = f"{int(cover_shift * 100)}%"
             body = (
-                f"Quick heads-up {salutation} — {match} tonight. "
+                f"Quick heads-up {salutation} — {m_name}: {match} tonight. "
                 f"Saturday IPL matches shift restaurant covers by {cover_shift_str}. "
                 f"Skip a dine-in promo; push your {active_offer_title} as a delivery-only special instead. "
                 f"I can draft the delivery banner now."
