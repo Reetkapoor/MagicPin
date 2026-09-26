@@ -188,14 +188,16 @@ def compose(category: Dict[str, Any], merchant: Dict[str, Any], trigger: Dict[st
     elif kind == "active_planning_intent":
         topic = payload.get("intent_topic", "")
         if "thali" in topic.lower() or "corporate" in topic.lower() or "restaurant" in merchant.get("category_slug", ""):
+            active_offer = next(
+                (o.get("title") for o in merchant.get("offers", [])
+                 if o.get("status") == "active" and "thali" in o.get("title", "").lower()),
+                None,
+            )
+            offer_text = active_offer or "your active thali offer"
             body = (
-                f"{salutation}, here's a starter version — you can edit:\n\n"
-                f"{m_name} Corporate Thali — for offices in {locality}\n"
-                f"- 10 thalis @ ₹125 each (₹25 off retail) + free delivery\n"
-                f"- 25 thalis @ ₹115 each + 2 free filter coffees\n"
-                f"- 50+: ₹105 each + 1 free dosa platter\n"
-                f"- WhatsApp the day-before by 5pm; we deliver between 12:30-1pm\n\n"
-                f"Want me to draft a 3-line WhatsApp to send to nearby office facilities managers?"
+                f"{salutation}, here's a starter direction for {m_name}'s corporate thali package in {locality}. "
+                f"Build the package around {offer_text}, then adapt quantity and delivery terms for office orders. "
+                f"I can turn this into a short WhatsApp draft for nearby office facilities managers now."
             )
             cta = "binary_yes_no"
             template_name = "vera_planning_proposal_v1"
@@ -233,12 +235,14 @@ def compose(category: Dict[str, Any], merchant: Dict[str, Any], trigger: Dict[st
                 break
                 
         if not is_weeknight:
-            # Saturday match: covers DROP 12%, push delivery-only!
+            # Saturday insight is explicitly supplied by the trigger context.
+            cover_shift = payload.get("covers_delta_pct", -0.12)
+            cover_shift_str = f"{int(cover_shift * 100)}%"
             body = (
-                f"Quick heads-up {salutation} — {match} at {venue} tonight, {time_str}. "
-                f"Important: Saturday IPL matches usually shift -12% restaurant covers (people watch at home). "
-                f"Skip the match-night promo today; instead push your {active_offer_title} (already active) as a delivery-only Saturday special. "
-                f"Want me to draft the Swiggy banner + an Insta story? Live in 10 min."
+                f"Quick heads-up {salutation} — {match} at {venue} tonight. "
+                f"Saturday IPL matches shift restaurant covers by {cover_shift_str}. "
+                f"Skip a match-night dine-in promo; push your {active_offer_title} as a delivery-only Saturday special instead. "
+                f"I can draft the delivery banner and Insta story now."
             )
             cta = "binary_yes_no"
             template_name = "vera_ipl_intel_v1"
