@@ -12,7 +12,11 @@ from .schemas import (
     ReplyRequest, ReplyResponse, TickAction, TickResponse, HealthResponse,
 )
 from .store import state
-from .config import MAX_CONTEXT_BYTES
+from .config import MAX_CONTEXT_BYTES, MAX_TICK_ACTIONS
+from .facts import collect_allowed_numbers
+from .signals import select_triggers
+from .suppression import suppression_key
+from .validator import validate_composed
 
 app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0")
 START_TIME = time.time()
@@ -64,29 +68,62 @@ async def push_context(body: ContextRequest):
 @app.post("/tick", response_model=TickResponse)
 @app.post("/v1/tick", response_model=TickResponse)
 async def tick(body: TickRequest):
+    candidates = []
+    for trg_id in body.available_triggers:
+        trg = state.get_context("trigger", trg_id)
+        if not trg:
+            continue
+        item = dict(trg)
+        item["_trigger_id"] = trg_id
+        candidates.append(item)
+
     actions = []
     merchants_messaged_this_tick = set()
-    sorted_triggers = []
-    for trg_id in body.available_triggers:
-        trg_payload = state.get_context("trigger", trg_id)
-        if not trg_payload:
-            continue
-        sorted_triggers.append((trg_payload.get("urgency", 1), trg_id, trg_payload))
-    sorted_triggers.sort(key=lambda x: x[0], reverse=True)
-
-    for _, trg_id, trg in sorted_triggers:
+    for trg in select_triggers(candidates, max_actions=MAX_TICK_ACTIONS):
+        trg_id = trg.get("_trigger_id") or trg.get("trigger_id") or trg.get("id")
         m_id = trg.get("merchant_id")
         if not m_id or m_id in merchants_messaged_this_tick or m_id in state.opted_out_merchants:
             continue
-        suppression_key = trg.get("suppression_key", "")
-        if suppression_key and suppression_key in state.suppressions:
-            continue
+
         merchant = state.get_context("merchant", m_id)
         if not merchant:
             continue
         category = get_category_for_merchant(merchant)
         customer = state.get_context("customer", trg.get("customer_id")) if trg.get("customer_id") else None
-        composed = compose(category, merchant, trg, customer)
+
+        key = suppression_key(trg, body.now) if body.now else trg.get("suppression_key", "")
+        if key and key in state.suppressions:
+            continue
+
+        trigger_for_compose = dict(trg)
+        if key:
+            trigger_for_compose["suppression_key"] = key
+
+        composed = compose(category, merchant, trigger_for_compose, customer)
+        allowed_numbers = collect_allowed_numbers(category, merchant, trigger_for_compose, customer)
+        valid, _reason = validate_composed(
+            composed, merchant, category, trigger_for_compose, allowed_numbers
+        )
+
+        # One deterministic fallback attempt after validation failure.
+        if not valid:
+            merchant_name = merchant.get("identity", {}).get("name", "your business")
+            locality = merchant.get("identity", {}).get("locality") or merchant.get("identity", {}).get("city") or ""
+            body_text = (
+                f"{merchant_name}, Vera has a relevant update for your business"
+                + (f" in {locality}." if locality else ".")
+                + " I can prepare the next step using the information already provided. "
+                "Would you like me to proceed?"
+            )
+            composed = {
+                **composed,
+                "body": body_text,
+                "cta": "binary_yes_no",
+                "rationale": "Deterministic grounded fallback after outbound validation.",
+                "template_name": "vera_grounded_fallback_v1",
+                "template_params": [merchant_name],
+            }
+
         conv_id = f"conv_{m_id}_{trg_id}"
         actions.append({
             "conversation_id": conv_id,
@@ -98,19 +135,19 @@ async def tick(body: TickRequest):
             "template_params": composed["template_params"],
             "body": composed["body"],
             "cta": composed["cta"],
-            "suppression_key": composed["suppression_key"],
+            "suppression_key": key or composed["suppression_key"],
             "rationale": composed["rationale"],
         })
         merchants_messaged_this_tick.add(m_id)
-        if suppression_key:
-            state.suppressions.add(suppression_key)
+        if key:
+            state.suppressions.add(key)
         state.merchant_active_conv[m_id] = conv_id
         state.conversations.setdefault(conv_id, []).append({
-            "from": "vera", "body": composed["body"],
+            "from": "vera",
+            "body": composed["body"],
             "ts": body.now or "1970-01-01T00:00:00+00:00",
         })
-        if len(actions) >= 20:
-            break
+
     return {"actions": actions}
 
 
