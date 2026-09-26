@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from .composer import compose, get_category_for_merchant, handle_reply
 from .schemas import (
-    ContextAcceptedResponse, ContextRequest, MetadataResponse,
+    ContextAcceptedResponse, ContextRequest, MetadataResponse, TickRequest,
     ReplyRequest, ReplyResponse, TickAction, TickResponse, HealthResponse,
 )
 from .store import state
@@ -59,7 +59,7 @@ async def push_context(body: ContextRequest):
 
 @app.post("/tick", response_model=TickResponse)
 @app.post("/v1/tick", response_model=TickResponse)
-async def tick(body):
+async def tick(body: TickRequest):
     actions = []
     merchants_messaged_this_tick = set()
     sorted_triggers = []
