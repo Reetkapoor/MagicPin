@@ -34,7 +34,7 @@ app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0", lifespan=life
 
 @app.get("/healthz", response_model=HealthResponse)
 @app.get("/v1/healthz", response_model=HealthResponse)
-async def healthz():
+@app.get("/")\nasync def demo_ui():\n    from fastapi.responses import FileResponse\n    return FileResponse("static/index.html")\n\n\nasync def healthz():
     return {"status": "ok", "uptime_seconds": int(time.monotonic() - START_TIME), "contexts_loaded": state.get_counts()}
 
 
