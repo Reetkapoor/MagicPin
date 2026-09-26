@@ -6,7 +6,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .composer import compose, get_category_for_merchant, handle_reply
 from .schemas import (
@@ -32,9 +32,14 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Vera Merchant AI Assistant", version="1.0.0", lifespan=lifespan)
 
 
+@app.get("/")
+async def demo_ui():
+    return FileResponse("static/index.html")
+
+
 @app.get("/healthz", response_model=HealthResponse)
 @app.get("/v1/healthz", response_model=HealthResponse)
-@app.get("/")\nasync def demo_ui():\n    from fastapi.responses import FileResponse\n    return FileResponse("static/index.html")\n\n\nasync def healthz():
+async def healthz():
     return {"status": "ok", "uptime_seconds": int(time.monotonic() - START_TIME), "contexts_loaded": state.get_counts()}
 
 
